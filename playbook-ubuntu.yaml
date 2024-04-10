@@ -1,0 +1,90 @@
+-
+  name: Setting Up MediaWiki
+  hosts: servers
+  tasks:
+    - name: Install Required Packages
+      become: yes
+      apt:
+        pkg:
+          - apache2
+          - mysql-server
+          - php
+          - php-mysql
+          - libapache2-mod-php
+          - php-xml
+          - php-mbstring
+          - php-intl
+          - python3-pip
+        state: present
+        update_cache: yes
+
+    - name: Download Media Wiki Tar
+      get_url:
+        url: https://releases.wikimedia.org/mediawiki/1.41/mediawiki-1.41.0.tar.gz
+        dest: /tmp
+
+    - name: Create /mediawiki Directory
+      become: yes
+      file:
+        path: /var/lib/mediawiki
+        state: directory
+
+    - name: Extract Media Wiki Tar
+      become: yes
+      unarchive:
+        src: /tmp/mediawiki-1.41.0.tar.gz
+        dest: /var/lib/mediawiki
+        remote_src: yes
+
+    - name: SymLink for MediaWiki
+      become: yes
+      file:
+        src: /var/lib/mediawiki/mediawiki-1.41.0
+        dest: /var/www/html/mediawiki
+        state: link
+
+    - name: Update Apache2 Enabled Sites
+      become: yes
+      replace:
+        path: /etc/apache2/sites-enabled/000-default.conf 
+        regexp: 'DocumentRoot \/var\/www\/html$'
+        replace: 'DocumentRoot /var/www/html/mediawiki'
+
+    - name: Restart Apache2 Service
+      become: yes
+      service:
+        name: apache2
+        state: restarted
+        enabled: yes
+
+
+    - name: Pip Pre-Reqs for SQL
+      become: yes
+      pip:
+        name: PyMySQL
+
+    - name: Enable MySQL
+      become: yes
+      service:
+        name: mysql
+        state: started
+        enabled: yes
+
+    - name: Create database for MediaWiki
+      become: yes
+      become_user: root
+      community.mysql.mysql_db:
+        login_unix_socket: /var/run/mysqld/mysqld.sock
+        name: mediawiki
+        state: present
+
+    - name: Create MediaWiki DB user
+      become: yes
+      become_user: root
+      community.mysql.mysql_user:
+        login_unix_socket: /var/run/mysqld/mysqld.sock 
+        state: present
+        name: mediawiki
+        password: 12345
+        priv:
+          "mediawiki.*:ALL,GRANT"
